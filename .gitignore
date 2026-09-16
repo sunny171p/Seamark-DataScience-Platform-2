@@ -1,0 +1,29 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
+
+# Virtual environment
+.venv/
+venv/
+
+# Secrets — never commit these (see supabase/.env.example, dashboard/.env.example,
+# stock_alerts/.env.example, shopify_sync/.env.example)
+.env
+supabase/.env
+dashboard/.env
+stock_alerts/.env
+stock_alerts/weekly_check.log
+shopify_sync/.env
+.streamlit/secrets.toml
+
+# Real customer personal data — never commit these (names/emails from real
+# customers). Regenerate locally with `python shopify_sync/refresh_raw_data.py`
+# (see shopify_sync/README.md) or a manual Shopify export — see DATA_PROVENANCE.md.
+# cleaned_data/*_clean.csv are derived from the raw_data files below by
+# analytics/01_data_cleaning.py and carry the same Email/Name columns forward,
+# so they need the same treatment — regenerate locally with `python pipeline.py`.
+raw_data/customers_export.csv
+raw_data/orders_export.csv
+cleaned_data/customers_clean.csv
+cleaned_data/orders_clean.csv
