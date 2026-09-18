@@ -141,8 +141,10 @@ with st.sidebar:
         st.info("Data source: local CSVs (cleaned_data/ + outputs/)")
     st.caption(
         "Snapshot of the last `python pipeline.py` run. "
-        "Re-run the pipeline (and `supabase/sync_to_supabase.py` if using "
-        "Supabase) to refresh these numbers — nothing here auto-updates."
+        "To refresh with live Shopify data first, run "
+        "`shopify_sync/refresh_raw_data.py`, then re-run the pipeline "
+        "(and `supabase/sync_to_supabase.py` if using Supabase) — "
+        "nothing here auto-updates."
     )
     st.divider()
     if pipeline_health:
