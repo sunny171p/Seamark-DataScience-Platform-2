@@ -166,13 +166,19 @@ def _graphql(query: str, variables: dict) -> dict:
 # --
 # PRODUCTS
 # --
-# One row per product (not per variant/image like the raw Shopify CSV
-# export) — 01_data_cleaning.py only ever uses product-level fields from
-# this file anyway (see its own header comment), so this is the same
-# information the pipeline actually reads, just without replicating the
-# blank-Title continuation rows a manual export has. Uses each product's
-# first variant for price/cost, same as how a single-variant catalogue
-# export would look.
+# One row per VARIANT, matching Shopify's own manual CSV export shape —
+# this matters because 09_catalog_vs_sales_mix.py matches real order line
+# items to a product by Variant SKU, and an order can be for any variant
+# of a product (a specific size/colour), not just the first one. Only the
+# first variant row of each product has Handle/Title/Vendor/etc. filled
+# in (every other row leaves those blank) — same as a real manual export,
+# and 01_data_cleaning.py already expects exactly this shape (its own
+# header comment says so): it keeps only the row where Title isn't blank,
+# which is how it gets to one row per product.
+#
+# Fetches up to 100 variants per product — comfortably more than this
+# catalogue actually has; if a product ever has more than that, only its
+# first 100 variants' SKUs would be covered here.
 # --
 
 PRODUCTS_QUERY = """
@@ -189,9 +195,10 @@ query ($cursor: String) {
         tags
         status
         shippingDestinations: metafield(namespace: "custom", key: "shipping_destinations") { value }
-        variants(first: 1) {
+        variants(first: 100) {
           edges {
             node {
+              sku
               price
               compareAtPrice
               inventoryItem { unitCost { amount } }
@@ -238,28 +245,63 @@ def fetch_products() -> pd.DataFrame:
         for edge in products["edges"]:
             node = edge["node"]
             variants = node["variants"]["edges"]
-            first_variant = variants[0]["node"] if variants else {}
-            unit_cost = None
-            if cost_available:
-                inv_item = first_variant.get("inventoryItem") or {}
-                unit_cost_obj = inv_item.get("unitCost")
-                unit_cost = unit_cost_obj["amount"] if unit_cost_obj else None
-
             metafield = node.get("shippingDestinations")
             shipping_dest = metafield["value"] if metafield else None
 
-            rows.append({
-                "Handle": node["handle"],
-                "Title": node["title"],
-                "Vendor": node["vendor"],
-                "Type": node["productType"],
-                "Tags": ", ".join(node["tags"]) if node["tags"] else "",
-                "Variant Price": first_variant.get("price"),
-                "Variant Compare At Price": first_variant.get("compareAtPrice"),
-                "Cost per item": unit_cost,
-                SHIPPING_DEST_COL: shipping_dest,
-                "Status": (node["status"] or "").lower(),
-            })
+            if not variants:
+                # A product with no variants shouldn't happen in practice,
+                # but skipping it silently would just make it vanish from
+                # the export — write one row with blank variant fields
+                # instead so it's still visible and countable.
+                variants = [{"node": {}}]
+
+            for i, v_edge in enumerate(variants):
+                v = v_edge["node"]
+                unit_cost = None
+                if cost_available:
+                    inv_item = v.get("inventoryItem") or {}
+                    unit_cost_obj = inv_item.get("unitCost")
+                    unit_cost = unit_cost_obj["amount"] if unit_cost_obj else None
+
+                if i == 0:
+                    # First variant row: carries the product-level fields,
+                    # same as the first row of a product's group in a real
+                    # manual export.
+                    rows.append({
+                        "Handle": node["handle"],
+                        "Title": node["title"],
+                        "Vendor": node["vendor"],
+                        "Type": node["productType"],
+                        "Tags": ", ".join(node["tags"]) if node["tags"] else "",
+                        "Variant SKU": v.get("sku"),
+                        "Variant Price": v.get("price"),
+                        "Variant Compare At Price": v.get("compareAtPrice"),
+                        "Cost per item": unit_cost,
+                        SHIPPING_DEST_COL: shipping_dest,
+                        "Status": (node["status"] or "").lower(),
+                    })
+                else:
+                    # Continuation row for an additional variant — Handle
+                    # is still filled in (it's what 09_catalog_vs_sales_mix.py
+                    # ultimately maps a matched SKU back to), but the
+                    # product-level fields are left blank, same as a real
+                    # manual export leaves them blank on these rows. This
+                    # is what lets 01_data_cleaning.py's existing "drop
+                    # rows with a blank Title" logic keep exactly one row
+                    # per product, unchanged.
+                    rows.append({
+                        "Handle": node["handle"],
+                        "Title": None,
+                        "Vendor": None,
+                        "Type": None,
+                        "Tags": None,
+                        "Variant SKU": v.get("sku"),
+                        "Variant Price": v.get("price"),
+                        "Variant Compare At Price": v.get("compareAtPrice"),
+                        "Cost per item": unit_cost,
+                        SHIPPING_DEST_COL: None,
+                        "Status": None,
+                    })
             cursor = edge["cursor"]
 
         if not products["pageInfo"]["hasNextPage"]:
@@ -303,6 +345,8 @@ query ($cursor: String) {
         }
         billingAddress { countryCodeV2 }
         shippingAddress { countryCodeV2 }
+        paymentGatewayNames
+        sourceName
         riskAssessment: riskAssessment(first: 1) { assessments { riskLevel } }
         lineItems(first: 100) {
           edges {
@@ -395,6 +439,8 @@ def fetch_orders() -> pd.DataFrame:
                     "Discount Amount": node["currentTotalDiscountsSet"]["shopMoney"]["amount"],
                     "Billing Country": billing.get("countryCodeV2", ""),
                     "Shipping Country": shipping.get("countryCodeV2", ""),
+                    "Payment Method": ", ".join(node.get("paymentGatewayNames") or []),
+                    "Source": node.get("sourceName") or "",
                     "Risk Level": risk_level,
                     "Lineitem name": li["name"],
                     "Lineitem quantity": li["quantity"],
