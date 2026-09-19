@@ -57,6 +57,40 @@ def slug(name: str) -> str:
     return re.sub(r"_+", "_", name).strip("_")
 
 
+# Streamlit renders its content inside its own internal scrolling container,
+# not the page's actual <body> -- the real <html>/<body> stays fixed at the
+# viewport's height no matter how much content is on the page. That means
+# Playwright's normal full_page=True screenshot, which measures the real
+# document's height, never sees past one screenful: it looks "full page" but
+# is really just a same-size copy of whatever's visible. To get a genuinely
+# full screenshot, this measures how tall Streamlit's own content container
+# actually is, temporarily resizes the browser viewport to match (so nothing
+# needs to scroll), takes the shot, then puts the viewport back for the next
+# section.
+_GET_CONTENT_HEIGHT_JS = """
+() => {
+    const candidates = [
+        document.body,
+        document.documentElement,
+        document.querySelector('[data-testid="stAppViewContainer"]'),
+        document.querySelector('[data-testid="stMain"]'),
+        document.querySelector('section.main'),
+    ].filter(Boolean);
+    return Math.max(...candidates.map(el => el.scrollHeight));
+}
+"""
+
+
+def capture_full_page(page, out_path, base_viewport):
+    content_height = page.evaluate(_GET_CONTENT_HEIGHT_JS)
+    target_height = max(base_viewport["height"], content_height + 40)
+
+    page.set_viewport_size({"width": base_viewport["width"], "height": target_height})
+    page.wait_for_timeout(400)  # let vh-based layout reflow at the new size
+    page.screenshot(path=str(out_path), full_page=True)
+    page.set_viewport_size(base_viewport)  # restore before the next section
+
+
 def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -68,7 +102,8 @@ def main() -> None:
             print("Run: playwright install chromium")
             sys.exit(1)
 
-        page = browser.new_page(viewport={"width": 1440, "height": 900})
+        base_viewport = {"width": 1440, "height": 900}
+        page = browser.new_page(viewport=base_viewport)
 
         print(f"Opening {DASHBOARD_URL} ...")
         try:
@@ -116,7 +151,7 @@ def main() -> None:
             page.wait_for_timeout(1500)  # let the newly-selected section render
 
             out_path = OUT_DIR / f"{slug(section)}.png"
-            page.screenshot(path=str(out_path), full_page=True)
+            capture_full_page(page, out_path, base_viewport)
             print(f"  Saved {out_path.relative_to(OUT_DIR.parent.parent)}")
 
         browser.close()
