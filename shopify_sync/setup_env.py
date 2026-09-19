@@ -71,7 +71,7 @@ def main() -> None:
         lines.append(f"SHOPIFY_CLIENT_ID={client_id}")
     if client_secret:
         lines.append(f"SHOPIFY_CLIENT_SECRET={client_secret}")
-    lines.append("SHOPIFY_API_VERSION=2025-01")
+    lines.append("SHOPIFY_API_VERSION=2026-07")
 
     ENV_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
