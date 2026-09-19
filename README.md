@@ -1,6 +1,8 @@
 # Seamark Global Innovations — Post-Launch Data Science Project (Project 2)
 
-Author: Sunday Emmanuel Azeez (with Claude)
+[![CI](https://github.com/sunny171p/Seamark-DataScience-Platform-2/actions/workflows/ci.yml/badge.svg)](https://github.com/sunny171p/Seamark-DataScience-Platform-2/actions/workflows/ci.yml)
+
+Author: Sunday Emmanuel Azeez
 
 This is a real-data analysis of Seamark's relaunched Shopify store. It covers product classification, pricing integrity, the checkout funnel and bot-traffic adjustment, forecast-vs-actual revenue, omnichannel visibility, and affiliate signups, all served through a numbered pipeline, a Flask API, and a Streamlit dashboard. Every number traces back to a real export listed in `DATA_PROVENANCE.md`. Nothing on the dashboard, in the API, or in `outputs/` is simulated. The point of this README is that anyone can clone it, install it, and run the whole thing without hitting an error, not just someone who's been following along the whole time.
 
@@ -31,6 +33,46 @@ These are full-page captures of every section in `streamlit run dashboard/app.py
 
 ### Stock Alerts
 ![Stock Alerts](assets/dashboard/stock_alerts.png)
+
+## How data actually flows through this
+
+```mermaid
+flowchart TD
+    subgraph SRC["Data sources"]
+        SHOPIFY(["Shopify Admin API (live)"])
+        MANUAL["Manual exports (traffic, UpPromote, Google Merchant Center)"]
+        OLIST(["Olist dataset (external, real, static)"])
+    end
+
+    SHOPIFY -->|"shopify_sync/refresh_raw_data.py"| RAW
+    MANUAL --> RAW
+    OLIST --> RAW
+
+    RAW["raw_data/ products, orders, customers, traffic, affiliates, external_olist/"]
+
+    RAW -->|"python pipeline.py (10 numbered stages)"| ANALYTICS["analytics/ cleaning, classification, pricing integrity, funnel, forecast check, catalog-vs-sales, external benchmark, health check"]
+
+    ANALYTICS --> CLEANED["cleaned_data/"]
+    ANALYTICS --> OUTPUTS["outputs/ (CSV summaries + charts)"]
+
+    CLEANED --> DASH["dashboard/app.py (Streamlit)"]
+    OUTPUTS --> DASH
+    CLEANED --> API["api/main.py (Flask JSON API)"]
+    OUTPUTS --> API
+    CLEANED --> SUPA["supabase/sync_to_supabase.py"]
+    OUTPUTS --> SUPA
+    SUPA --> HOSTED(["Supabase (optional hosted dashboard)"])
+
+    RAW -.->|"independently re-derives every number"| TESTS["tests/ (pytest safety net)"]
+    CLEANED -.-> TESTS
+    OUTPUTS -.-> TESTS
+
+    SHOPIFY -->|"stock_alerts/check_stock.py (weekly, live, separate from pipeline.py)"| ALERT["Email + desktop stockout alert"]
+
+    DASH -.->|"capture_screenshots.py"| SHOTS["assets/dashboard/*.png (for this README)"]
+```
+
+Two things worth pointing out about this shape on purpose. First, `stock_alerts/` is drawn going straight from the live Shopify API to an alert, bypassing `pipeline.py` entirely — that's deliberate, covered in the "Quick start — stock alerts" section below, since `pipeline.py` should never silently hit the network. Second, `tests/` reads from `raw_data/`, `cleaned_data/`, and `outputs/` at the same time and checks them against each other, not just against a single stage's own output — that's what "independently re-derives every number" means in practice, and it's why a passing test suite is worth more here than a script that just ran without crashing.
 
 ## Project structure
 

@@ -3,6 +3,9 @@ __pycache__/
 .pytest_cache/
 .DS_Store
 
+# pipeline.py's own run log — overwritten every run, not project data
+pipeline_run.log
+
 # Virtual environment
 .venv/
 venv/

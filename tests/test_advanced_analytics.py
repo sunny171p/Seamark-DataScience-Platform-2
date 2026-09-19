@@ -1,6 +1,6 @@
 # ==
 # test_advanced_analytics.py
-# Author: Sunday Emmanuel Azeez (with Claude)
+# Author: Sunday Emmanuel Azeez
 # Seamark Global Innovations — Post-Launch Data Science Project (Project 2)
 # ==
 #
@@ -13,6 +13,8 @@
 
 import pandas as pd
 import pytest
+
+from conftest import skip_if_missing
 
 
 # --
@@ -67,6 +69,7 @@ def test_gateway_and_channel_variance_flags_match_real_order_data(raw_data_dir, 
     order export and confirms the saved flags agree, rather than
     trusting the script's own claim that no friction point exists.
     """
+    skip_if_missing(raw_data_dir / "orders_export.csv")
     raw_orders = pd.read_csv(raw_data_dir / "orders_export.csv", low_memory=False)
     order_level = raw_orders.groupby("Name", as_index=False).first()
 

@@ -1,6 +1,6 @@
 # ==
 # refresh_raw_data.py
-# Author: Sunday Emmanuel Azeez (with Claude)
+# Author: Sunday Emmanuel Azeez
 # Seamark Global Innovations — Shopify Sync add-on
 # ==
 #
@@ -62,6 +62,7 @@
 
 import os
 import sys
+import time
 from pathlib import Path
 
 import pandas as pd
@@ -135,6 +136,23 @@ def _get_access_token() -> str:
     return token
 
 
+# How many times _graphql() will wait and retry after Shopify throttles a
+# request, before giving up and failing the sync for real. Shopify's
+# GraphQL Admin API charges every query against a per-store cost budget
+# that refills over time — this store's own sync barely touches that
+# budget today (275 products, a handful of orders), but a bigger store
+# syncing more often could genuinely hit it, and the old version of this
+# script just died the first time that happened instead of waiting it out.
+_MAX_THROTTLE_RETRIES = 5
+
+
+def _is_throttled(payload: dict) -> bool:
+    for err in payload.get("errors", []) or []:
+        if (err.get("extensions") or {}).get("code") == "THROTTLED":
+            return True
+    return False
+
+
 def _graphql(query: str, variables: dict) -> dict:
     if not SHOPIFY_STORE_DOMAIN:
         _fail(
@@ -146,21 +164,63 @@ def _graphql(query: str, variables: dict) -> dict:
         "X-Shopify-Access-Token": _get_access_token(),
         "Content-Type": "application/json",
     }
-    resp = requests.post(url, headers=headers, json={"query": query, "variables": variables}, timeout=30)
-    if resp.status_code != 200:
-        _fail(
-            f"Shopify API returned HTTP {resp.status_code}: {resp.text[:500]}\n"
-            f"If this says 'Unsupported API version', edit SHOPIFY_API_VERSION in .env "
-            f"to a version Shopify's docs currently list."
-        )
-    payload = resp.json()
-    if "errors" in payload:
-        _fail(
-            f"Shopify API returned errors: {payload['errors']}\n"
-            f"See README.md's 'IF A FIELD ERRORS' note — this usually names the exact "
-            f"field to fix, not a sign the whole script is broken."
-        )
-    return payload["data"]
+
+    for attempt in range(1, _MAX_THROTTLE_RETRIES + 1):
+        resp = requests.post(url, headers=headers, json={"query": query, "variables": variables}, timeout=30)
+
+        # Shopify signals "slow down" two different ways: a plain HTTP 429
+        # (rare on this endpoint, but worth defending against anyway), or an
+        # ordinary HTTP 200 whose body contains a GraphQL error with
+        # extensions.code == "THROTTLED" -- this is the normal case, since
+        # Shopify's cost-based throttling happens inside an otherwise
+        # successful request. Both get the same treatment: wait, then try
+        # again, instead of failing the whole sync over a temporary limit.
+        if resp.status_code == 429:
+            wait_s = float(resp.headers.get("Retry-After", 2 ** attempt))
+            print(f"  Rate-limited (HTTP 429). Waiting {wait_s:.1f}s before retrying "
+                  f"(attempt {attempt}/{_MAX_THROTTLE_RETRIES})...")
+            time.sleep(wait_s)
+            continue
+
+        if resp.status_code != 200:
+            _fail(
+                f"Shopify API returned HTTP {resp.status_code}: {resp.text[:500]}\n"
+                f"If this says 'Unsupported API version', edit SHOPIFY_API_VERSION in .env "
+                f"to a version Shopify's docs currently list."
+            )
+
+        payload = resp.json()
+
+        if _is_throttled(payload):
+            # extensions.cost.throttleStatus.restoreRate is how fast this
+            # store's query-cost budget refills, in points per second --
+            # use it to wait roughly as long as it takes to earn this
+            # query's cost back, and fall back to plain exponential backoff
+            # if Shopify doesn't send that detail for some reason.
+            cost = (payload.get("extensions") or {}).get("cost") or {}
+            throttle_status = cost.get("throttleStatus") or {}
+            restore_rate = throttle_status.get("restoreRate") or 0
+            requested_cost = cost.get("requestedQueryCost") or 0
+            wait_s = min(10.0, max(1.0, requested_cost / restore_rate)) if restore_rate else float(2 ** attempt)
+            print(f"  Shopify throttled this request. Waiting {wait_s:.1f}s before retrying "
+                  f"(attempt {attempt}/{_MAX_THROTTLE_RETRIES})...")
+            time.sleep(wait_s)
+            continue
+
+        if "errors" in payload:
+            _fail(
+                f"Shopify API returned errors: {payload['errors']}\n"
+                f"See README.md's 'IF A FIELD ERRORS' note — this usually names the exact "
+                f"field to fix, not a sign the whole script is broken."
+            )
+
+        return payload["data"]
+
+    _fail(
+        f"Shopify kept throttling this request even after {_MAX_THROTTLE_RETRIES} retries. "
+        f"Try again in a minute or two -- this usually just means a lot of sync traffic "
+        f"happened at once, not that anything is broken."
+    )
 
 
 # --

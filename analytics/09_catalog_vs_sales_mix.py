@@ -1,6 +1,6 @@
 # ==
 # 09_catalog_vs_sales_mix.py
-# Author: Sunday Emmanuel Azeez (with Claude)
+# Author: Sunday Emmanuel Azeez
 # Seamark Global Innovations — Post-Launch Data Science Project (Project 2)
 # Created: September 2026
 # ==

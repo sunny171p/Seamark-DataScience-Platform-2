@@ -1,6 +1,6 @@
 # ==
 # check_stock.py
-# Author: Sunday Emmanuel Azeez (with Claude)
+# Author: Sunday Emmanuel Azeez
 # Seamark Global Innovations — Stock Alerts add-on
 # ==
 #

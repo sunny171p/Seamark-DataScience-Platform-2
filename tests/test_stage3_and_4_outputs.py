@@ -1,6 +1,6 @@
 # ==
 # test_stage3_and_4_outputs.py
-# Author: Sunday Emmanuel Azeez (with Claude)
+# Author: Sunday Emmanuel Azeez
 # Seamark Global Innovations — Post-Launch Data Science Project (Project 2)
 # ==
 #
@@ -13,6 +13,8 @@
 import pandas as pd
 import pytest
 
+from conftest import skip_if_missing
+
 # FIXED (Claude, September 2026): matches the same date-based cutoff used in
 # analytics/04_forecast_vs_actual.py. Project 1's forecast file used to have
 # exactly 11 sparse historical rows, so slicing with iloc[11:] isolated the
@@ -24,6 +26,7 @@ PROJECT1_LAST_REAL_ORDER_DATE = pd.Timestamp("2026-08-04")
 
 
 def test_funnel_conversion_rate_matches_recomputation(raw_data_dir, cleaned_data_dir, outputs_dir):
+    skip_if_missing(cleaned_data_dir / "orders_clean.csv")
     visitors = pd.read_csv(raw_data_dir / "visitors_over_time.csv")
     orders = pd.read_csv(cleaned_data_dir / "orders_clean.csv")
 
@@ -48,6 +51,7 @@ def test_bot_session_count_matches_recomputation(raw_data_dir, outputs_dir):
 
 
 def test_forecast_vs_actual_matches_recomputation(project_root, cleaned_data_dir, raw_data_dir, outputs_dir):
+    skip_if_missing(cleaned_data_dir / "orders_clean.csv")
     forecast = pd.read_csv(raw_data_dir / "project1_sales_forecast_90days.csv")
     orders = pd.read_csv(cleaned_data_dir / "orders_clean.csv")
 

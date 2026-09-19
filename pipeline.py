@@ -14,6 +14,17 @@
 # HOW TO RUN:
 #   python pipeline.py
 #
+# ABOUT THE LOGGING:
+# This used to just print everything straight to the terminal. It now
+# goes through Python's logging module instead, at INFO/WARNING/ERROR
+# levels, and every run also writes a plain-text copy to
+# pipeline_run.log in the project root (overwritten each run, not
+# accumulated, and it's gitignored since it's a local run artifact,
+# not project data). That means a failed run can be diffed or grepped
+# afterwards, and it's a step toward this being pluggable into real
+# monitoring later, instead of only ever being read by a person
+# watching the terminal at the moment it runs.
+#
 # STAGE ORDER MATTERS:
 # Stage 2 depends on Stage 1 having written products_clean.csv.
 # Stages 3-6 each depend on Stage 1's cleaned data and/or an earlier
@@ -34,18 +45,34 @@
 # numbers.
 # ==
 
+import logging
+import os
 import subprocess
 import sys
-import os
 from datetime import datetime
+
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+ANALYTICS_DIR = os.path.join(PROJECT_ROOT, "analytics")
+LOG_FILE = os.path.join(PROJECT_ROOT, "pipeline_run.log")
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s  %(levelname)-7s  %(message)s",
+    datefmt="%H:%M:%S",
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler(LOG_FILE, mode="w", encoding="utf-8"),
+    ],
+)
+log = logging.getLogger("pipeline")
 
 START_TIME = datetime.now()
 
-print("=" * 62)
-print("  SEAMARK GLOBAL INNOVATIONS")
-print("  Post-Launch Data Science Pipeline (Project 2)")
-print(f"  Started: {START_TIME.strftime('%d %B %Y at %H:%M:%S')}")
-print("=" * 62)
+log.info("=" * 62)
+log.info("  SEAMARK GLOBAL INNOVATIONS")
+log.info("  Post-Launch Data Science Pipeline (Project 2)")
+log.info(f"  Started: {START_TIME.strftime('%d %B %Y at %H:%M:%S')}")
+log.info("=" * 62)
 
 
 pipeline_stages = [
@@ -61,16 +88,14 @@ pipeline_stages = [
     ("08_pipeline_health.py",         "Stage 10 — Pipeline Health Check (launch-readiness gate, runs last)"),
 ]
 
-ANALYTICS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "analytics")
-
 results = []
 
 for filename, stage_name in pipeline_stages:
 
-    print(f"\n{'─' * 62}")
-    print(f"  {stage_name}")
-    print(f"  Running: {filename}")
-    print(f"{'─' * 62}")
+    log.info("─" * 62)
+    log.info(f"  {stage_name}")
+    log.info(f"  Running: {filename}")
+    log.info("─" * 62)
 
     try:
         result = subprocess.run(
@@ -84,27 +109,27 @@ for filename, stage_name in pipeline_stages:
         if result.returncode == 0:
             if result.stdout:
                 for line in result.stdout.strip().split('\n'):
-                    print(f"  {line}")
-            print(f"\n  Result: SUCCESS")
+                    log.info(f"  {line}")
+            log.info("  Result: SUCCESS")
             results.append((stage_name, "SUCCESS", None))
 
         else:
-            print(f"\n  Result: FAILED")
             error_snippet = result.stderr[-300:] if result.stderr else "No error output captured"
-            print(f"  Error : {error_snippet}")
+            log.error("  Result: FAILED")
+            log.error(f"  Error : {error_snippet}")
             if result.stderr and "ModuleNotFoundError" in result.stderr:
                 missing_module = result.stderr.strip().split('\n')[-1].split("'")
                 missing_module = missing_module[1] if len(missing_module) > 1 else "a required package"
-                print(f"\n  Fix   : '{missing_module}' isn't installed in this Python environment.")
-                print(f"          Run this from the project root, then try again: pip install -r requirements.txt")
+                log.warning(f"  Fix   : '{missing_module}' isn't installed in this Python environment.")
+                log.warning("          Run this from the project root, then try again: pip install -r requirements.txt")
             results.append((stage_name, "FAILED", error_snippet))
 
     except subprocess.TimeoutExpired:
-        print(f"\n  Result: TIMEOUT — exceeded 120 seconds")
+        log.error("  Result: TIMEOUT — exceeded 120 seconds")
         results.append((stage_name, "TIMEOUT", "Exceeded 120 second limit"))
 
     except Exception as e:
-        print(f"\n  Result: ERROR — {str(e)}")
+        log.error(f"  Result: ERROR — {str(e)}")
         results.append((stage_name, "ERROR", str(e)))
 
 
@@ -114,36 +139,37 @@ DURATION = (END_TIME - START_TIME).seconds
 success_count = sum(1 for _, status, _ in results if status == "SUCCESS")
 fail_count = len(results) - success_count
 
-print(f"\n\n{'=' * 62}")
-print("  PIPELINE SUMMARY")
-print(f"{'=' * 62}")
+log.info("=" * 62)
+log.info("  PIPELINE SUMMARY")
+log.info("=" * 62)
 
 for stage_name, status, error in results:
     status_label = "OK  " if status == "SUCCESS" else "FAIL"
-    print(f"  [{status_label}]  {stage_name}")
+    line_log = log.info if status == "SUCCESS" else log.error
+    line_log(f"  [{status_label}]  {stage_name}")
     if error:
-        print(f"         {error[:120]}")
+        line_log(f"         {error[:120]}")
 
-print(f"\n{'─' * 62}")
-print(f"  Stages run    : {len(pipeline_stages)}")
-print(f"  Successful    : {success_count}")
-print(f"  Failed        : {fail_count}")
-print(f"  Duration      : {DURATION} seconds")
-print(f"  Finished      : {END_TIME.strftime('%d %B %Y at %H:%M:%S')}")
-print(f"{'─' * 62}")
+log.info("─" * 62)
+log.info(f"  Stages run    : {len(pipeline_stages)}")
+log.info(f"  Successful    : {success_count}")
+log.info(f"  Failed        : {fail_count}")
+log.info(f"  Duration      : {DURATION} seconds")
+log.info(f"  Finished      : {END_TIME.strftime('%d %B %Y at %H:%M:%S')}")
+log.info("─" * 62)
 
 if fail_count == 0:
-    print("\n  ALL STAGES PASSED")
-    print("  Cleaned data  : cleaned_data/")
-    print("  CSV/chart out : outputs/")
-    print("  Affiliate signups are analysed (Stage 7); real order-level affiliate")
-    print("  attribution and live-rate integration still depend on data this store")
-    print("  doesn't have yet — see DATA_PROVENANCE.md's 'Known gap' section.")
+    log.info("  ALL STAGES PASSED")
+    log.info("  Cleaned data  : cleaned_data/")
+    log.info("  CSV/chart out : outputs/")
+    log.info("  Affiliate signups are analysed (Stage 7); real order-level affiliate")
+    log.info("  attribution and live-rate integration still depend on data this store")
+    log.info("  doesn't have yet — see DATA_PROVENANCE.md's 'Known gap' section.")
 else:
-    print(f"\n  PIPELINE FINISHED WITH {fail_count} FAILURE(S)")
-    print("  Common causes:")
-    print("  - Missing CSV in raw_data/")
-    print("  - Column name changed in latest Shopify export")
-    print("  - Run the failed stage individually to see the full error")
+    log.error(f"  PIPELINE FINISHED WITH {fail_count} FAILURE(S)")
+    log.warning("  Common causes:")
+    log.warning("  - Missing CSV in raw_data/")
+    log.warning("  - Column name changed in latest Shopify export")
+    log.warning("  - Run the failed stage individually to see the full error")
 
-print(f"{'=' * 62}\n")
+log.info("=" * 62)

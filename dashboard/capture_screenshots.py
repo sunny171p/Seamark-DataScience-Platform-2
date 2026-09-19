@@ -1,6 +1,6 @@
 # ==
 # capture_screenshots.py
-# Author: Sunday Emmanuel Azeez (with Claude)
+# Author: Sunday Emmanuel Azeez
 # Seamark Global Innovations — Project 2 dashboard
 # ==
 #

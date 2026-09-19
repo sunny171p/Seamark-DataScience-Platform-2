@@ -1,6 +1,6 @@
 # ==
 # test_omnichannel_visibility.py
-# Author: Sunday Emmanuel Azeez (with Claude)
+# Author: Sunday Emmanuel Azeez
 # Seamark Global Innovations — Post-Launch Data Science Project (Project 2)
 # ==
 #

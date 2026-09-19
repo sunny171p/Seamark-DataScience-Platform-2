@@ -1,3 +1,6 @@
+# The Seamark Global Innovations Project 2
+# Author: Sunday Emmanuel Azeez
+
 # Bot Traffic Mitigation — How This Project Handles It
 
 ## What the dashboard's "bot-adjusted conversion rate" actually is

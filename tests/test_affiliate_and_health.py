@@ -1,6 +1,6 @@
 # ==
 # test_affiliate_and_health.py
-# Author: Sunday Emmanuel Azeez (with Claude)
+# Author: Sunday Emmanuel Azeez
 # Seamark Global Innovations — Post-Launch Data Science Project (Project 2)
 # ==
 #
@@ -13,6 +13,8 @@
 
 import pandas as pd
 import pytest
+
+from conftest import skip_if_missing
 
 
 # --
@@ -54,6 +56,7 @@ def test_affiliate_by_status_totals_match_summary(outputs_dir):
 # --
 
 def test_pipeline_health_row_counts_match_cleaned_data(cleaned_data_dir, outputs_dir):
+    skip_if_missing(cleaned_data_dir / "orders_clean.csv", cleaned_data_dir / "customers_clean.csv")
     products = pd.read_csv(cleaned_data_dir / "products_clean.csv")
     orders = pd.read_csv(cleaned_data_dir / "orders_clean.csv")
     customers = pd.read_csv(cleaned_data_dir / "customers_clean.csv")

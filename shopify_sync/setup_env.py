@@ -1,6 +1,6 @@
 # ==
 # setup_env.py
-# Author: Sunday Emmanuel Azeez (with Claude)
+# Author: Sunday Emmanuel Azeez
 # Seamark Global Innovations — Shopify Sync add-on
 # ==
 #

@@ -1,6 +1,6 @@
 # ==
 # test_data_integrity.py
-# Author: Sunday Emmanuel Azeez (with Claude)
+# Author: Sunday Emmanuel Azeez
 # Seamark Global Innovations — Post-Launch Data Science Project (Project 2)
 # ==
 #
@@ -18,6 +18,8 @@ import sys
 
 import pandas as pd
 
+from conftest import skip_if_missing
+
 
 def test_products_clean_has_no_duplicate_handles(cleaned_data_dir):
     products = pd.read_csv(cleaned_data_dir / "products_clean.csv")
@@ -32,6 +34,7 @@ def test_orders_clean_has_one_row_per_order(raw_data_dir, cleaned_data_dir):
     has to collapse that back to one row per order, not silently keep
     duplicates or (worse) sum a repeated Total across line items.
     """
+    skip_if_missing(raw_data_dir / "orders_export.csv", cleaned_data_dir / "orders_clean.csv")
     raw_orders = pd.read_csv(raw_data_dir / "orders_export.csv")
     orders_clean = pd.read_csv(cleaned_data_dir / "orders_clean.csv")
 
@@ -49,6 +52,7 @@ def test_orders_total_matches_raw_export(raw_data_dir, cleaned_data_dir):
     and checks it against the saved cleaned file — independent of
     whatever the cleaning script's own internal logic did.
     """
+    skip_if_missing(raw_data_dir / "orders_export.csv", cleaned_data_dir / "orders_clean.csv")
     raw_orders = pd.read_csv(raw_data_dir / "orders_export.csv")
     expected_total = raw_orders.groupby("Name")["Total"].first().sum()
 
@@ -67,6 +71,7 @@ def test_orders_and_customers_totals_agree(cleaned_data_dir):
     missing an order or the customers file is stale — either way it's
     worth knowing before anything is built on top of both.
     """
+    skip_if_missing(cleaned_data_dir / "orders_clean.csv", cleaned_data_dir / "customers_clean.csv")
     orders = pd.read_csv(cleaned_data_dir / "orders_clean.csv")
     customers = pd.read_csv(cleaned_data_dir / "customers_clean.csv")
 
