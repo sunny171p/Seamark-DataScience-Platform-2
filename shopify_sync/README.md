@@ -131,3 +131,19 @@ cost — `01_data_cleaning.py` only ever reads product-level fields anyway
 (see its own header comment), so this is the same information the
 pipeline actually uses, without the blank continuation rows a manual
 export has to filter out first.
+
+## The other way to get data in: webhooks instead of pulling
+
+Everything above is a pull, you run this script and it asks Shopify for
+a fresh snapshot. `webhook_listener.py`, in this same folder, is the
+opposite: Shopify pushes an order to it the moment one actually happens,
+instead of waiting to be asked. It lands each event as raw JSON under
+`raw_data/webhook_events/`, and `fold_webhook_events.py` is the separate
+step that turns those into rows appended to `orders_export.csv`. Full
+setup, including how to verify the request actually came from Shopify
+and how to expose this to the internet for testing, is documented at the
+top of `webhook_listener.py` itself. Worth being honest about where this
+stands: it's a real, runnable starting point built from Shopify's
+documented webhook format, not something that's been checked against a
+live webhook from this actual store yet, so test it with Shopify's own
+"send test notification" button before trusting it with real traffic.
